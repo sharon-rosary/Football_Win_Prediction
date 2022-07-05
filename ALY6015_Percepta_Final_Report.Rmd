@@ -1,0 +1,741 @@
+<!---
+Title
+--->
+
+
+
+<P><BR>
+<CENTER>
+<BR>
+![Northeastern logo1](NEU_LOGO-image.png)
+<PR><BR><BR>
+![Northeastern logo2](NEU_LOGO-image2.png)
+<p><BR><B><FONT SIZE=5.5, COLOR="BLACK"><BR>Percepta Project: Final Report<BR></B>
+<BR></FONT>
+<P><BR><FONT SIZE=4.5, COLOR="BLACK">Sharon Appoline Rosary, Naveenkumar Govindasamy, David Joseph Johnson
+<BR>ALY6015-21591 SEC 10 Intermediate Analytics
+<BR> Instructor: Vladimir Shapiro
+<BR>Date:`r format(Sys.time(), "%d %B, %Y")`<BR>
+</CENTER>
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+<BR><BR>
+
+# Introduction
+
+The Campeonato Nacional de Liga de Primera División commonly known as La Liga is the top professional soccer division for men in the Spanish football league system. It consists of 20 teams; the bottom three teams are relegated to the Segunda División and replaced by the top two teams as well as the play-off winner from the Segunda Division.  
+
+Over the years, 62 teams have competed in La Liga, winning nine titles. Real Madrid has won the championship a record 34 times. La Liga has been the top league in Europe in each of the seven years from 2013 to 2019 (calculated using accumulated figures from five preceding seasons) and has led Europe for 22 of the 60 ranked years up to 2019, more than any other country.  
+
+The dataset consists of data collected from each match including data points like:
+
+* Full-time result
+
+* Half-time result
+
+* Home Team Goals
+
+* Goals
+
+* Shots
+
+* Shots on Target
+
+* Red cards
+
+* Yellow cards
+
+Betting information pertaining to return values of 6 companies corresponding to Home Team Win, Away Team Win and Draw is also
+included in the dataset.
+
+\newpage
+
+The goal of the analysis is to find relevant insights on predicting the winning team and Betting
+returns. Feature Selection, Correlation of Different Factors, Fitting and enhancing the
+performance of Predictive Models will be executed while answering the business questions.   
+
+
+## **Overview of Business Questions and Methods Used:**
+
+* Predict the winning team (Home team or away team).  
+From the preliminary analysis, we found that teams are more likely to win on their home ground. A predictive model to determine the winning team whilst including other factors can be built using logistic regression technique.
+
+* What are the factors influencing the returns of betting companies?  
+It is a general assumption that the returns from betting companies vary w.r.t the match statistics. Using multiple regression analysis, we can find the factors that influence the returns of betting companies. This method facilitates the analysis of relationships between single dependent variable (betting return rates) and multiple independent variables (match statistics such as goals, wins, red cards and yellow cards, etc.)
+
+* Do all betting companies give the same returns?  
+While placing bets it is confusing to choose a company that yields maximum results, hence differences in mean returns of companies is analyzed. ANOVA test can be used to statistically validate if all companies provide similar returns.
+
+
+\newpage
+
+
+```{r , echo=FALSE ,results='hide', warning=FALSE, message=FALSE}
+### Install ISLR Package which contains the College Dataset
+### Invoke Packages
+library("ISLR")
+library("ggplot2")
+library("corrplot")
+library("dplyr")
+library("janitor")
+library("tidyr")
+library("RColorBrewer")
+library("car")
+library("psych")
+library("imputeTS")
+library("corrplot")
+library("MASS")
+library("leaps")
+library("knitr")
+library("tibble")
+library("stargazer")
+library("lattice")
+library("caret")
+library("pROC")
+library("glmnet")
+library("gridExtra")
+```
+
+## Data Cleaning
+
+```{r }
+# Loading Dataset
+raw_data <- read.csv("/Users/davidjjohn97/Northeastern/Quarter_2/Term_3/Intermediate_Analytics/La_Liga_2019.csv",header = TRUE)
+# Datasets from 2015-2019 are combined to give a larger training set for predictive model
+raw_data_extra <- read.csv("/Users/davidjjohn97/Northeastern/Quarter_2/Term_3/Intermediate_Analytics/La_Liga_2015-19.csv",header = TRUE)
+# Data Cleaning 
+#Remove empty rows and columns.
+laliga <- remove_empty(raw_data,which = c("rows","cols"),quiet=TRUE)
+laliga_extra <- remove_empty(raw_data_extra,which = c("rows","cols"),quiet=TRUE)
+names(laliga)
+
+
+#Drop unwanted variables.
+laliga_new <- laliga[-c(2:3,42:105)]
+laliga_extra <- laliga_extra[c(5:22)]
+names(laliga_new)
+
+#Check for duplicate records.
+get_dupes(laliga_new)
+get_dupes(laliga_extra)
+
+#Change column names to meaningful ones.
+names(laliga_new)[4:21] = c("fult_home_goal","fult_away_goal","fult_result","hlft_home_goal","hlft_away_goal","hlft_result","home_shot","away_shot","home_shot_on_target","away_shot_on_target","home_fouls","away_fouls","home_corners","away_corners","home_yellow","away_yellow","home_red","away_red")
+names(laliga_extra) = c("fult_home_goal","fult_away_goal","fult_result","hlft_home_goal","hlft_away_goal","hlft_result","home_shot","away_shot","home_shot_on_target","away_shot_on_target","home_fouls","away_fouls","home_corners","away_corners","home_yellow","away_yellow","home_red","away_red")
+names(laliga_new)
+
+#Check for NAs
+knitr::kable(sum(is.na(laliga_new)),col.names = "No. of NAs")
+```
+
+# Analysis
+
+## Exploratory Data Analysis
+
+```{r Descriptive Statistics}
+knitr::kable(psych::describe(laliga_new,na.rm = TRUE,skew = FALSE),caption = "Descriptive Statistics")
+```
+
+<FONT SIZE=3.5, COLOR="GREY"><CENTER><B>Table 1: Descriptive Statistics of all numerical variables in LaLiga dataset</B></CENTER></FONT>
+<BR>
+From the above descriptive statistics table, we can infer the following:  
+* There are 180 observations with 39 variables.
+
+* The highest number of goals scored by the home team in a match is 5 whereas the maximum number of goals scored by the away team is 4 in a match.
+
+* The maximum number of fouls made in a match is 28. The average fouls made by the home team and the away team are nearly equal.
+
+* The maximum number of yellow cards issued in a match is 8 whereas the maximum number of red cards issued in a match is 2.
+
+* The highest average betting returns among betting companies for the home team is 2.626 by Poker stars betting company whereas the highest betting returns for the away team is 4.58 by William hill (WH) betting company.
+
+* The minimum return for home team among betting companies is 1.30 by Venture Capital (VC) betting company and the maximum return for the home team is 10 by Betting365, B.W and Venture Capital (VC) betting companies.
+
+* The minimum return and maximum return among betting companies for the away team is 1.10 and 26 by Venture Capital (VC) betting company.
+
+### Top ten teams with maximum number of goals throughout the league:
+
+The top ten teams who scored maximum number of goals in home ground throughout the
+league can be plotted using a bar plot.
+<CENTER>
+
+```{r Top ten teams w.r.t home goals}
+#aggregate function to calculate total goals scored as a home team.
+agg_home <- aggregate(laliga_new$fult_home_goal, by=list(Category=laliga_new$HomeTeam), FUN=sum)
+home_data <- agg_home[order(- agg_home$x),]
+
+#Bar plot to show the top ten teams w.r.t home goals
+ggplot(head(home_data,10),aes(x=x,y=Category))+ggtitle("Top 10 teams w.r.t Home goals")+labs(x="No. of goals",y=" ")+ geom_bar(stat="identity", fill="slateblue1")+geom_text(mapping=aes(label=x),position=position_dodge(width=0.9),cex=3,hjust=-0.1)
+```
+
+<FONT SIZE=3.5, COLOR="GREY"> Figure 1: Bar-plot to depict the top 10 teams with highest home-goals</FONT>
+<BR>
+</CENTER>
+<BR>
+The above bar chart depicts that **Barcelona scored the maximum number of home goals* i.e., 34 ranking first in our top ten teams’ table. The second highest team with the maximum number of home goals is Real Madrid i.e., 20.  
+
+A similar bar plot to depict the top ten teams who scored maximum number of goals in
+away ground throughout the league can be plotted. 
+
+<CENTER>
+
+```{r Top ten teams w.r.t away goals}
+#aggregate function to calculate total goals scored as a away team.
+agg_away <- aggregate(laliga_new$fult_away_goal, by=list(Category=laliga_new$HomeTeam), FUN=sum)
+away_data <- agg_away[order(- agg_away$x),]
+
+#Bar plot to show the top ten teams w.r.t away goals
+ggplot(head(away_data,10),aes(x=x,y=Category))+ggtitle("Top 10 teams w.r.t Away goals")+labs(x="No. of goals",y=" ")+ geom_bar(stat="identity", fill="slateblue1")+geom_text(mapping=aes(label=x),position=position_dodge(width=0.9),cex=3,hjust=-0.1)
+```
+<BR>
+<FONT SIZE=3.5, COLOR="GREY"> Figure 2: Bar-plot to depict the top 10 teams with highest away-goals</FONT>
+<BR>
+</CENTER>
+<BR>
+
+The above bar plot depicts that **Espanol scored the maximum number of away goals** i.e., 20 ranking first in our top ten team's table. The second highest team with the maximum number of away goals is Eibar i.e., 15. We can also observe that most of the teams appear in both the tables i.e., Teams like Villarreal, Osasuna, Betis, Barcelona have scored a fairly good number of goals on both home and away ground.  
+
+### Top five teams with most red cards  
+
+The top teams with maximum number of red cards throughout the league can be calculated using the aggregate() function like below.
+
+```{r Teams with most red cards}
+#aggregate function to calculate total red cards by home team.
+agg_home_red <- aggregate(laliga_new$home_red, by=list(Category=laliga_new$HomeTeam), FUN=sum)
+agg_home_red <- head(agg_home_red[order(- agg_home_red$x),],5) 
+rownames(agg_home_red) = c("1 ", "2 ", " 3", "4 ", " 5")
+knitr::kable(agg_home_red[1:2],col.names = c("Team","No. of Red cards"),caption="Teams with most red cards (Home)")
+```
+<FONT SIZE=3.5, COLOR="GREY"><CENTER><B>Table 2: Top 5 teams with highest Red cards on Home ground</B></CENTER></FONT>
+<BR>
+
+Betis, Celta and Levante have been issued three red cards in their home ground throughout the league 
+
+```{r }
+#aggregate function to calculate total red cards by away team.
+agg_away_red <- aggregate(laliga_new$away_red, by=list(Category=laliga_new$HomeTeam), FUN=sum)
+agg_away_red <- head(agg_away_red[order(- agg_away_red$x),],5) 
+rownames(agg_away_red) = c("1 ", "2 ", " 3", "4 ", " 5")
+knitr::kable(agg_away_red[1:2],col.names = c("Team","No. of Red cards"),caption="Teams with most red cards (Away)")
+```
+<FONT SIZE=3.5, COLOR="GREY"><CENTER><B>Table 3: Top 5 teams with highest Red cards on Away ground</B></CENTER></FONT>
+<BR>
+
+Granada has been issued three red cards in away ground throughout the league. We can see that Celta have been issued more red cards in both home ground and away ground.
+
+### Correlation between home goals and returns of different betting companies 
+The relationship between home goals and returns of different betting companies can be visually presented using a scatter plot.
+<CENTER>
+```{r}
+ggplot(data=laliga_new,aes(B365H+BWH+IWH+PSH+WHH+VCH,fult_home_goal)) +
+   geom_point(color="slateblue1") + 
+   ggtitle("Correlation between home goals and returns of different betting companies") + labs(y="Home goals",x= "Returns of betting companies (B365,BW,IW,PS,WH,VC)")
+```
+<BR>
+<FONT SIZE=3.5, COLOR="GREY"> Figure 3: Scatter-plot to depict the relationship between Home-goals and return rates of different companies</FONT>
+<BR>
+</CENTER>
+<BR>
+
+The data points line up well, a horizontal line amongst these dots, and the line would clearly be a good fit to the data. However, the fact that the line would be horizontal means that the input values (that is, returns of betting companies) are irrelevant to the output values (that is, home goals). Any change in home goals, the returns are always going to be right around the same value.
+
+<CENTER>
+```{r }
+x <- ggplot(data=laliga_new,aes(B365H+B365A+B365D,BWH+BWA+BWD)) +
+   geom_point() + 
+   ggtitle("Correlation between Bet365 and B.W betting companies") +
+   geom_smooth(method='lm')
+y <- x + theme(plot.title = element_text(color="black", size=8, face="bold.italic"))
+y
+```
+<BR>
+<FONT SIZE=3.5, COLOR="GREY"> Figure 4: Scatter-plot to depict the relationship between Bet365 and B.W betting companies</FONT>
+<BR>
+<BR>
+
+```{r }
+w <- ggplot(data=laliga_new,aes(IWH+IWA+IWD,PSH+PSA+PSD)) +
+   geom_point() + 
+   ggtitle("Correlation between Incarnate and Poker stars betting companies") +
+   geom_smooth(method='lm')
+z <- w + theme(plot.title = element_text(color="black", size=8, face="bold.italic"))
+z
+```
+<BR>
+<FONT SIZE=3.5, COLOR="GREY"> Figure 5: Scatter-plot to depict the relationship Incarnate and Poker stars betting companies</FONT>
+<BR>
+</CENTER>
+<BR>
+There is a strong positive correlation between the returns of the betting companies. i.e., As the returns of Betting365 company increase, the returns of B.W betting company also increase and vice versa. 
+ 
+### Correlation between Shots vs shots on target by team
+The correlation between shots and shots on target can be given as,
+
+```{r }
+df <-laliga_new
+dfe <- data.frame("Team", 0,0)
+for (row in 1:nrow(df)) {
+    ftr <- df[row, "fult_result"]
+    date  <- df[row, "date"]
+
+    if(ftr == "H") {
+      dfe[nrow(dfe) + 1,] = c("Home", as.numeric(df[row, "home_shot"]),as.numeric(df[row, "home_shot_on_target"]))
+    }
+    if(ftr == "A") {
+      dfe[nrow(dfe) + 1,] = c("Away", as.numeric(df[row, "away_shot"]),as.numeric(df[row, "away_shot_on_target"]))
+    }
+}
+dfe <- dfe[-c(1), ]
+colnames(dfe) <- c('Teams','Shots','Shots_on_Target')
+dfe$Teams <- as.factor(dfe$Teams)
+dfe$Shots <- as.numeric(dfe$Shots)
+dfe$Shots_on_Target <- as.numeric(dfe$Shots_on_Target)
+
+sct <- ggplot(dfe, aes(x=Shots, y=Shots_on_Target, color=Teams)) + geom_point(size=1) + geom_smooth(method=lm) + xlim(0,30) + ylim(0,20) +
+  labs(x="Shots Attempted", y = "Shots on Target")+ ggtitle("Shots Vs Shots on Target by Team")
+```
+
+<CENTER>
+```{r , echo=FALSE ,results='hide', warning=FALSE, message=FALSE}
+sct
+```
+<BR>
+<FONT SIZE=3.5, COLOR="GREY"> Figure 6: Scatter-plot to depict the relationship between Shots Vs Shots on Target by Team</FONT>
+<BR>
+</CENTER>
+<BR>
+
+The scatter plot above depicts the relationship between shots attempted and shots on target when the winning teams are playing on their home ground or away ground. We can observe that the teams play better on their home ground. This could be due to multiple factors like support of fans, familiarity with their home ground, etc.  
+
+### Histogram of full-time results:
+
+```{r }
+t <-as.data.frame(table(df$fult_result))
+hist_win <-ggplot(df, aes(x=fult_result)) +
+  geom_bar(fill="lightblue") +
+  theme(axis.text.x = element_text(face="bold", color="black", 
+                           size=10),
+          axis.text.y = element_text(face="bold", color="black", 
+                           size=10)) + ylim(0, 100) +
+  labs(x="Winning Team", y = "Total Count") + scale_x_discrete(labels=c("A" = "Away Team", "D" = "Draw",
+                              "H" = "Home Team")) +
+  theme(plot.caption = element_text(hjust = 0.5)) +
+  geom_text(aes(label = ..count..), stat = "count", vjust = 1.5, colour = "black") + ggtitle("Full Time Results")
+```
+
+<CENTER>
+```{r , echo=FALSE ,results='hide', warning=FALSE, message=FALSE}
+hist_win
+```
+<BR>
+<FONT SIZE=3.5, COLOR="GREY"> Figure 7: Histogram of Full Time Results</FONT>
+<BR>
+</CENTER>
+<BR>
+
+The plot above depicts the histogram of frequency of wins for away team, home team or draw. We can conclude that the total number of wins for home team is more (total of 83 wins) on the home ground.
+
+\newpage
+
+## Goal 1: Predict the winning team (Home team or away team)
+
+### Logistic Regression Models to Predict Winning Team
+
+A predictive model to determine the winning team whilst including other factors can be built using logistic regression technique. 
+
+Logistic regression is a process of modelling the probability of a discrete outcome given an input variable. The
+most common logistic regression models a binary outcome; something that can take two values such as true/false,
+yes/no and in this case Win/Loss.  
+
+
+```{r}
+# Logistic Regression Models to Predict Winning Team
+
+# Preparing Data frame
+laliga <- laliga_extra
+
+## Drop unwanted variables.
+names(laliga)
+head(laliga)
+
+## Converting attributes to numeric
+laliga$hlft_home_goal <-as.numeric(laliga$hlft_home_goal)
+laliga$hlft_away_goal <-as.numeric(laliga$hlft_away_goal)
+laliga$home_shot <-as.numeric(laliga$home_shot)
+laliga$away_shot <-as.numeric(laliga$away_shot)
+laliga$home_fouls <-as.numeric(laliga$home_fouls)
+laliga$away_fouls <-as.numeric(laliga$away_fouls)
+laliga$home_corners <-as.numeric(laliga$home_corners)
+laliga$away_corners <-as.numeric(laliga$away_corners)
+laliga$home_yellow <-as.numeric(laliga$home_yellow)
+laliga$away_yellow <-as.numeric(laliga$away_yellow)
+laliga$home_red <-as.numeric(laliga$home_red)
+laliga$away_red <-as.numeric(laliga$away_red)
+laliga$home_shot_on_target <-as.numeric(laliga$home_shot_on_target)
+laliga$away_shot_on_target <-as.numeric(laliga$away_shot_on_target)
+
+
+# Remove Columns with Full Time Result => "Draw"
+laliga_WL<-laliga[!(laliga$fult_result=="D"),]
+
+# View Updated Data-Frame
+head(laliga_WL)
+```
+
+
+To fit the model, we must divide the data set into two parts: training and testing. The training data will be used to train the model, while the testing data will be used to test the model. This allows us to confirm that the model works effectively with new data and that we are not overfitting it.  
+
+The data is divided using the caret package's createDataPartition() function. I utilized a 70/30 split, which means that 70% of the observations will be used for training and 30% will be used for testing.
+
+```{r }
+# Checking for Class Bias
+
+## Check the proportion count.
+pvt_prop<- table(laliga_WL$fult_result)
+knitr::kable(pvt_prop,col.names = c("Level","Count"))
+```
+<FONT SIZE=3.5, COLOR="GREY"><CENTER><B>Table 4: Proportion of Wins for Home and Away Teams</B></CENTER></FONT>
+<BR>
+<CENTER>
+```{r }
+## Barplot to show proportion of class in Full Time Result
+barplot(pvt_prop, main="Barplot of Wins,to identify Class-Bias",col=rgb(0.8,0.1,0.1,0.6),width=0.1,space=0.5,ylim=c(0,500),xlab="Proportion")
+```
+<BR>
+<FONT SIZE=3.5, COLOR="GREY"> Figure 8: Bar-plot depicting Wins by Home and Away Teams</FONT>
+<BR>
+</CENTER>
+<BR>
+
+There is a class bias where the proportion of events is much larger than the proportion of non-events. So, we need to sample the observations in equal proportions to get better models.
+
+To address the problem of class bias, we can draw wins from 0's and 1's for the training set in equal proportions. Then, we can put the rest of the data that is not included for training data (development sample) into test data (validation sample). Thus, the split can be done using sample() function.
+
+```{r }
+
+# seed random generator for repeatability of samples.
+set.seed(369)
+
+# 70% - Training data and 30% - Testing data
+laliga_WL$fult_result <- ifelse(laliga_WL$fult_result == "H", 1, 0)
+train_fract <- 0.7
+input_ones <- laliga_WL[which(laliga_WL$fult_result == 1),]
+input_zeros <- laliga_WL[which(laliga_WL$fult_result == 0),]
+no_bias_rw_no <- nrow(input_zeros)
+input_zeros_no_bias <- input_zeros
+input_ones_no_bias <- head(input_ones,no_bias_rw_no)
+
+# Creation of training data:
+rnd_row_index <-sample (1:nrow(input_zeros_no_bias),train_fract*no_bias_rw_no)
+ones_training <- input_ones_no_bias[rnd_row_index,]
+zeroes_training <- input_zeros_no_bias[rnd_row_index,]
+train_set <- rbind(ones_training,zeroes_training)
+
+# Creation of test data:
+ones_test <- input_ones_no_bias[-rnd_row_index,]
+zeroes_test <- input_zeros_no_bias[-rnd_row_index,]
+test_set <- rbind(ones_test,zeroes_test)
+
+# Check class bias
+knitr::kable(table(train_set$fult_result),col.names = c("Level","Count"),caption="Training Data")
+```
+<FONT SIZE=3.5, COLOR="GREY"><CENTER><B>Table 5: Proportion of Wins for Home and Away Teams (Training Data)</B></CENTER></FONT>
+<BR>
+```{r }
+knitr::kable(table(test_set$fult_result),col.names = c("Level","Count"),caption="Test Data")
+```
+<FONT SIZE=3.5, COLOR="GREY"><CENTER><B>Table 6: Proportion of Wins for Home and Away Teams (Test Data)</B></CENTER></FONT>
+<BR>
+Initially, all the features are selected.
+```{r}
+
+# Model1
+win_predictive_model1 <- glm(fult_result ~ hlft_home_goal + hlft_away_goal + home_shot_on_target + away_shot_on_target + home_shot + away_shot + home_corners + away_corners + home_yellow + away_yellow + home_red + away_red ,data = train_set,family = binomial(link = "logit"))
+summary(win_predictive_model1)
+```
+
+Based on summary, a second model is created using only variables that proved to be significant.
+
+```{r }
+
+# Based on summary a second model is created using only variables that proved to be significant
+# Model2
+win_predictive_model2 <- glm(fult_result ~ hlft_home_goal + hlft_away_goal + home_shot_on_target + away_shot_on_target + home_shot + away_shot + home_red,data = train_set,family = binomial(link = "logit"))
+summary(win_predictive_model2)
+
+## Comparing regression coefficients (log-odds)
+### Model 1
+coef(win_predictive_model1)
+### Model 2 
+coef(win_predictive_model2)
+
+## The two models can be compared using Akaike information criterion test 
+aic <- AIC(win_predictive_model1,win_predictive_model2)
+aic
+```
+Here I have fitted a logistic model as the predictor variable is categorical. I have fitted the model with all the variables of the dataset to understand the variables and their significance values. In the summary of the model, we see that the estimates of the coefficients  are in log odds.
+We observed that hlft_home_goal, hlft_away_goa, away_shot_on_target, away_shot, home_corners, home_red are the most significant variables.  
+
+Since the ratio of data rows to the number of variables <40, we consider AIC values to determine which of multiple models is most likely to be the best model for a given dataset.  
+
+AIC test gives a AIC value of each model and the model with lower AIC value is preferred as it has less KL divergence and is therefore more suitable. Hence, Model 2 which has lower AIC (253.5216) value is considered a better model.
+
+```{r Regression coefficient}
+# log-odds
+knitr::kable(coef(win_predictive_model2),col.names="log-odds")
+```
+<FONT SIZE=3.5, COLOR="GREY"><CENTER><B>Table 7: Coefficients of Model2(log-odds)</B></CENTER></FONT>
+<BR>
+```{r }
+# Odds
+knitr::kable(exp(coef(win_predictive_model2)),col.names="Odds",caption="Conversion of log-odds to odds")
+```
+<FONT SIZE=3.5, COLOR="GREY"><CENTER><B>Table 8: Coefficients of Model2(odds)</B></CENTER></FONT>
+<BR>
+
+Interpretation:
+
+* The odds of FullTimeResult(fult_result) being Home-Win, increase by a factor of 6.0079344 for each Half Time Home Goal(hlft_home_goal)
+
+* The odds of FullTimeResult(fult_result) being Home-Win, decrease by a factor of 0.2176669 for each Half Time Away Goal(hlft_away_goal)
+
+* The odds of FullTimeResult(fult_result) being Home-Win, increase by a factor of 0.5141549 for each home_shot_on_target
+
+* The odds of FullTimeResult(fult_result) being Home-Win, decrease by a factor of 0.6652307 for each away_shot_on_target
+
+* The odds of FullTimeResult(fult_result) being Home-Win, decrease by a factor of 0.1108409 for each home_shot
+
+* The odds of FullTimeResult(fult_result) being Home-Win, decrease by a factor of 0.1214127 for each away_shot
+
+* The odds of FullTimeResult(fult_result) being Home-Win, decrease by a factor of 2.3359393 for home_red
+
+```{r }
+## Making predictions on test data
+probabilities.test <- predict(win_predictive_model2, newdata = test_set, type = "response")
+predicted.classes.min <- as.factor(ifelse(probabilities.test >= 0.5 ,"H","A"))
+
+## Model Accuracy
+test_set$fult_result <- as.factor(ifelse(as.numeric(test_set$fult_result) == 1, "H", "A"))
+win_predictive_model2_CM <-confusionMatrix(predicted.classes.min,test_set$fult_result,positive="H")
+win_predictive_model2_CM
+```
+
+The above confusion matrix depicts:
+
+* This classification model is 83.75% accurate and it has a confidence interval of (0.771, 0.891) at 95% confidence level. 
+
+* The true positive value is 69 whereas the true negative value is 65. The false positive value is 15 whereas the false negative is 11. In this case, false positive(Predicting 'Away Team Win' but actually 'Home Team Win') miscalculation is more damaging for the analysis.
+
+### Plot the receiver operator characteristic curve
+
+The receiver operator characteristic curve can be plotted using roc function from pROC package. It takes the response variable values and predicts probabilities as parameters.
+
+<CENTER>
+```{r }
+# Plot ROC
+ROC1 <- roc(test_set$fult_result,probabilities.test)
+plot(ROC1,col="blue",ylab="Sensitivity - TP Rate", xlab="Specificity - FP Rate")
+```
+<BR>
+<FONT SIZE=3.5, COLOR="GREY"> Figure 9: Receiver Operator Characteristics curve</FONT>
+<BR>
+</CENTER>
+<BR>
+
+The above plot depicts the trade-off between Sensitivity and Specificity. This classifier gives a curve closer to the top-left corner indicating a better performance. Usefulness based on AUC (Area Under the Curve) is as follows:
+
+*  0.9 - 1   : excellent
+
+*  0.8 - 0.9 : good
+
+*  0.7 - 0.8 : fair
+
+*  0.6 - 0.7 : poor
+
+*  0.5 - 0.6 : failed
+
+The area under the curve can be given by,
+```{r Area under the ROC curve}
+auc <- auc(ROC1)
+knitr::kable(auc,col.names = "AUC")
+```
+
+AUC measures the entire two-dimensional area underneath the entire ROC curve. The area under our ROC curve is ```r auc```.
+
+\newpage
+
+## Goal 2: What are the factors influencing the returns of betting companies?
+
+### Multiple Linear Regression to find variables associated with Betting rates.
+
+From the preliminary analysis, we found that there is no correlation between the number of goals and returns of betting companies. Hence, this can be validated on further analysis. An assumption is that the returns from betting companies fluctuate for every match given the match statistics. We can find the factors that influence the returns of betting companies using multiple regression techniques.
+
+<B>Multiple linear regression</B> is an extension of simple linear regression used to predict an outcome variable (y) based on the multiple distinct predictor variables (x) using the regression equation.
+The B365 betting returns of home team is taken into consideration for the analysis. It is compared against match statistics such as Full-time result, Half-time result, Home Team Goals, Goals, Shots, Shots on Target, Red cards and Yellow cards using multiple linear regression.
+
+The variables containing match statistics and betting returns of other companies are stored in two seperate datasets like below.
+```{r Segregate match statistics and betting returns into separate vectors}
+#Filter all the numerical columns
+laliga_num <- select_if(laliga_new,is.numeric)
+
+# Data frame containing match statistics
+laliga_game <- rbind(laliga_num[1:17])
+names(laliga_game)
+
+# Data frame containing betting companies' information
+laliga_comp <- rbind(laliga_num[17:34])
+names(laliga_comp)
+
+```
+
+A multiple linear regression model for checking the influence on betting returns can be given by,
+
+```{r Multiple linear regression for comparing B365 better returns for home team with other features.}
+bet_fit <- lm(B365H ~ .,data=laliga_game)
+summary(bet_fit)
+
+```
+From the above output, we can infer that
+
+- The first step in interpreting the multiple regression analysis is to examine the F-statistic and the associated p-value, at the bottom of model summary. 
+- At least one of the match statistic variables(predictor) is significantly related to the betting return rates (outcome variable). (Given its p-value (8.87e-6) < Significance Level (0.05))
+- The predictor variables shots on target (away),fouls (away) and home_red are significantly associated to betting returns of B365 company i.e., any changes made to those factors will affect the betting return rates. 
+- Other insignificant variables (without *) such as half time goals (home), goals, half time goals (away), home shots, away shots, fouls (home), etc. are not significantly associated to betting returns of B365 company (given its negative estimate value and Pr value) i .e., any changes made to those factors won't affect the betting returns.
+- Around 19%(R-squared value) variation in betting returns can be explained by the significant factors found above, which is too less to be considered.
+- The predictor variables that aren't significant can be removed and another model can be built.
+
+The updated regression model can be given as,
+```{r Updated Multiple linear regression for comparing B365 better returns for home team with other features}
+bet_fit2 <- lm(B365H ~ away_fouls + home_red ,data=laliga_game)
+summary(bet_fit2)
+```
+From the above output, we can infer that
+
+- None of the predictor variables are significantly associated to the betting returns (Given the p-value,0.186 which is significantly greater than the significance level (0.05)).
+- The R-squared values have drastically dropped to 0.7% i.e., nearly 0% indicating that none of the variables impact the betting return rates. Hence, this model can be omitted.
+
+Our assumption on betting returns getting influenced by match statistics has been proved wrong. Let us validate if the returns of betting companies influence each other.
+A multiple linear regression model to compare the association between returns of B365 betting company for home team with other returns can be shown as,
+```{r Multiple linear regression for comparing B365 better returns with other company returns}
+fit3 <- lm(B365H ~ .,data=laliga_comp)
+summary(fit3)
+
+```
+From the above output, we can infer that
+
+- The predictor variables B365D (returns of Betting 365 company for draw), BWH (returns from B.W company for home) , BWD (returns from B.W company for draw) and VCH (returns from Viley company for home) are significantly associated to the betting returns of B365 company (home) thus denoting a strong relationship between them.
+- The p-value is < 2.2e-16 and it is less than the significance level (0.05) denoting that at least one variable is significantly associated to the response variable.
+-The R-squared value is 0.9944 i.e., Almost 99% variation in betting returns can be explained by the significant variables found above.Thus, we can re-build another model omitting the insignificant variables in this model. The updated model can be given as,
+
+```{r Updated Multiple linear regression for comparing B365 better returns with other company returns}
+fit4 <- lm(B365H ~ B365D + BWH + BWD + VCH,data=laliga_comp)
+summary(fit4)
+```
+From the above output, we can infer that
+- All the predictor variables in the above model are significantly associated to the betting returns of B365 betting company (for home team).
+- Almost 99% variation in betting returns can be explained by all the variables in this model.
+- The regression equation can be given as B365H = - 0.22014*B365D + 0.25927*BWH + 0.23969*BWD + 0.77550* VCH - 0.14416. 
+- A change in 2 units of betting returns can increase estimate value by two times if all the other values predictor variables are kept constant.
+
+Thus, we can conclude that betting returns do not get impacted by match statistics. Instead, returns of Betting365 company (returns for home match) are influenced by returns of companies such as Betting 365 (returns for draw match), Betting World (returns for home match), Viley company (returns for home match).
+
+## Goal 3: Do all betting companies give the same returns?
+
+### Anova Test to compare the mean return rates of different betting companies
+
+While placing bets it is confusing to choose a company that yields maximum results, hence differences in mean returns of companies are analysed. ANOVA test can be used to statistically validate if all companies provide similar returns.
+
+```{r}
+laliga <- laliga_new
+
+#State the hypothesis
+#H0: Companies giving different returns
+#H1: Companies giving same Returns
+
+# Set significance level
+alpha <- 0.05
+
+# Dataframe for Betting companies
+B365H <- data.frame('Returns' = c(laliga$B365H),
+                    'companyname' = rep('B365H',180), stringsAsFactors = FALSE)
+
+                    
+BWH <- data.frame('Returns' = c(laliga$BWH),
+                      'companyname' = rep('BWH',180), stringsAsFactors = FALSE)
+                    
+                    
+IWH <- data.frame('Returns' = c(laliga$IWH),
+                      'companyname' = rep('IWH',180), stringsAsFactors = FALSE)
+
+
+PSH <- data.frame('Returns' = c(laliga$PSH),
+                      'companyname' = rep('PSH',180), stringsAsFactors = FALSE)
+
+WHH <- data.frame('Returns' = c(laliga$WHH),
+                      'companyname' = rep('WHH',180), stringsAsFactors = FALSE)
+
+
+VCH <- data.frame('Returns' = c(laliga$VCH),
+                      'companyname' = rep('VCH',180), stringsAsFactors = FALSE)
+
+
+# Combine the Dataframe
+
+Returnsdf <- c(B365H, BWH, IWH, PSH, WHH, VCH)
+
+
+Returns <- rbind(B365H, BWH, IWH, PSH, WHH, VCH)
+Returns$companyname <- as.factor(Returns$companyname)
+
+# ANOVA Test
+anova <- aov(Returns ~ companyname, data = Returns)
+
+summary(anova)
+
+anovasum <- summary(anova)
+
+#Find the critical value
+qf(1 - 0.05,anovasum[[1]][1,1],anovasum[[1]][2,1])
+criticalval <- 2.22
+
+#Compute the test value.
+
+test.value <- anovasum[[1]][[1,"F value"]]
+
+test.value  
+
+#Make the desicion 
+p.value <- anovasum[[1]][[1,"Pr(>F)"]]
+
+ifelse(criticalval > 0.05,"Failed to reject Null Hypothesis","Reject Null Hypothesis")
+
+```
+
+Observation: we have the resultant value which is greater than the significance level of 0.05, we fail to reject the null hypothesis because we do not have enough evidence to conclude that after statistically validating if all companies do not provide similar returns.
+
+\newpage
+
+# Conclusion
+
+* Goal 1: The model to predict the Wins of the Home Team by predicting if the Full Time Results (fult_result) as H, was built by considering the variables (Half-Time Home Team Goals-hlft_home_goal, Away Team Shots on Target-away_shot_on_target and Red cards given to Home Team-home_red) that proved to be significant. This model showed an accuracy of 83.75% and has a confidence interval of (0.771, 0.891) at 95% confidence level. The true positive value is 69 whereas the true negative value is 65. The false positive value is 15 whereas the false negative is 11. In this case, false positive (Predicting ‘Away Team Win’ but actually ‘Home Team Win’) miscalculation is more damaging for the analysis.
+
+* Goal 2: Using multiple regression, we were able to conclude that betting returns do not get impacted by match statistics. Instead it is influenced by betting returns of other companies i.e., Betting365 company (home team) was significantly associated to returns of companies such as B365 (draw), Betting World (home), Wiley-VC company (home).
+
+* Goal 3: While validating if all companies provide similar returns using ANOVA test, we failed to reject the null hypothesis (p-value greater than the significance value) because we did not have enough evidence to conclude that the companies provide similar returns.
+
+\newpage
+
+# References
+
+* (2022). Retrieved 31 January 2022, from https://cran.r-project.org/web/packages/ISLR/ISLR.pdf
+
+* Accuracy Vs Precision – NoSimpler. (2022). Retrieved 31 January 2022, from https://www.nosimpler.me/accuracy-precision/
+
+* set?, W. (2017). Why ROC Curve on test set?. Retrieved 31 January 2022, from https://stats.stackexchange.com/questions/265661/why-roc-curve-on-test-set
+
+* What is a ROC Curve and How to Interpret It. (2018). Retrieved 31 January 2022, from https://www.displayr.com/what-is-a-roc-curve-how-to-interpret-it/
+
+* ROC curves – what are they and how are they used?. (2011). Retrieved 31 January 2022, from https://acutecaretesting.org/en/articles/roc-curves-what-are-they-and-how-are-they-used#:~:text=As%20 \\ the%20area%20under%20an,stands%20for%20Receiver%20Operating%20Characteristic.
+
+
